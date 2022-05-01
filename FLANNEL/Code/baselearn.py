@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 modelType = 'alexnet' #set as needed
-
+#alexnet, shufflenet_v2_x1_0, resnet152, densenet161
 import os
 import numpy as np
 import torch
@@ -47,8 +47,10 @@ def loadModData():
 
 trainData, validationData = loadModData() 
 imageClass = ('Covid-19', 'Normal', 'Pneumonia')
+useCuda = False
 if torch.cuda.is_available():
     device = torch.device("cuda:0")
+    useCuda = True
 else:
     device = torch.device("cpu")
 my_model = torchvision.models.__dict__[modelType](pretrained=True)
@@ -59,16 +61,18 @@ elif modelType == 'alexnet':
     my_model.classifier[6] = torch.nn.Linear(my_model.classifier[6].in_features, 3, bias=True)
 elif modelType == 'densenet161':
     my_model.classifier = torch.nn.Linear(2208, 3, bias=True)
+elif model_param == 'shufflenet_v2_x1_0':
+    red_model.fc = torch.nn.Linear(1024, out_features=4, bias=True)
 my_model.eval()
 
 if modelType == 'alexnet':
     my_model.features = torch.nn.DataParallel(my_model.features)
-    # my_model.cuda()
+
 else:
     my_model = torch.nn.DataParallel(my_model)
-    # my_model.cuda()
 
-optimizer = torch.optim.SGD(my_model.parameters(), lr=0.001, momentum=0.9)
+if useCuda:
+    my_model.cuda()
 
 def train_model(mod, mod_trainData):
     mod.train() 
@@ -78,7 +82,8 @@ def train_model(mod, mod_trainData):
     for epoch in range(n_epoch):
         curr_epoch_loss = []
         for data, target in mod_trainData:
-            # data, target = data.cuda(), target.cuda()
+            if useCuda:
+                data, target = data.cuda(), target.cuda()
             optimizer.zero_grad()
             loss = criterion(mod(data), target)
             loss.backward()
@@ -97,7 +102,8 @@ def eval_model(mod, data):
     predY = list()
     mod.eval()
     for d, t in data:
-        # d, t = d.cuda(), t.cuda()
+        if useCuda:
+            d, t = d.cuda(), t.cuda()
         _, predYicted = torch.max(mod(d).data, 1)
         predY = np.append(predY,predYicted.detach().cpu().numpy())
         testY = np.append(testY,t.detach().cpu().numpy())
